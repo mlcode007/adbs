@@ -17,6 +17,7 @@ export PATH="/opt/homebrew/bin:/usr/local/go/bin:/snap/bin:${HOME}/go/bin:${PATH
 export GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
 export U2_AUTO_START="${U2_AUTO_START:-1}"
 export ADBS_PORT="${ADBS_PORT:-18081}"
+# 与 start.sh 一致：由 start-u2-bridge.sh 起 18082，避免 Go 内 maybeStartU2Bridge 重复启动
 
 LOG_DIR="${ROOT}/logs"
 RUN_DIR="${ROOT}/run"
@@ -25,7 +26,7 @@ PID_FILE="${RUN_DIR}/adbs.pid"
 LOG_FILE="${LOG_DIR}/adbs.log"
 
 echo "[adbs] 目录: $ROOT"
-echo "[adbs] U2_AUTO_START=$U2_AUTO_START  ADBS_PORT=$ADBS_PORT  GOPROXY=$GOPROXY"
+echo "[adbs] U2_AUTO_START=$U2_AUTO_START  ADBS_PORT=$ADBS_PORT  U2_INTERNAL_PORT=${U2_INTERNAL_PORT:-18082}  GOPROXY=$GOPROXY"
 
 free_port() {
   local port="$1"
@@ -42,6 +43,11 @@ free_port() {
 }
 
 free_port "$ADBS_PORT"
+
+if [[ -z "${U2_DISABLE:-}" ]]; then
+  bash "${ROOT}/scripts/start-u2-bridge.sh"
+  export U2_AUTO_START=0
+fi
 
 if ! command -v go >/dev/null 2>&1; then
   echo "[adbs] 错误: 未找到 go，请安装 Go 或把 go 加入 PATH。" >&2
@@ -67,3 +73,4 @@ echo "[adbs] 已后台启动 pid=$(cat "$PID_FILE")"
 echo "[adbs] 日志: $LOG_FILE"
 echo "[adbs] 访问: http://127.0.0.1:${ADBS_PORT}"
 echo "[adbs] 停止: kill \"\$(cat run/adbs.pid)\""
+echo "[adbs] u2 桥（若已启动）: kill \"\$(cat run/u2_bridge.pid 2>/dev/null)\"  或见 logs/u2_bridge.log"
