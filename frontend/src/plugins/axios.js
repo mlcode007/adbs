@@ -2,6 +2,7 @@
 
 import Vue from 'vue';
 import axios from "axios";
+import { getToken, clearToken } from "@/utils/auth";
 
 // Full config:  https://github.com/axios/axios#request-config
 // axios.defaults.baseURL = process.env.baseURL || process.env.apiUrl || '';
@@ -18,7 +19,11 @@ const _axios = axios.create(config);
 
 _axios.interceptors.request.use(
   function(config) {
-    // Do something before request is sent
+    const t = getToken();
+    if (t) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = "Bearer " + t;
+    }
     return config;
   },
   function(error) {
@@ -34,7 +39,13 @@ _axios.interceptors.response.use(
     return response;
   },
   function(error) {
-    // Do something with response error
+    if (error.response && error.response.status === 401) {
+      const url = (error.config && error.config.url) || "";
+      if (!url.includes("/api/auth/login")) {
+        clearToken();
+        window.location.hash = "#/login";
+      }
+    }
     return Promise.reject(error);
   }
 );

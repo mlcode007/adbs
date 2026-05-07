@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"adbs/api/handlers"
+	"adbs/api/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,42 +29,34 @@ func Init() *gin.Engine {
 	registerU2Routes(r)
 
 	api := r.Group("/api")
+	api.POST("/auth/login", handlers.Login)
+
+	protected := api.Group("")
+	protected.Use(middleware.AuthRequired())
 	{
+		protected.GET("/server/verify", handlers.GetServerVerify)
+
 		// 设备列表管理
-		devices := api.Group("/devices")
+		devices := protected.Group("/devices")
 		{
-			// 获取设备列表
 			devices.GET("", handlers.GetDevices)
-			// 连接设备
 			devices.POST("/connect", handlers.ConnectDevice)
-			// 断开设备
 			devices.POST("/disconnect", handlers.DisconnectDevice)
 		}
 
-		// 单台设备管理
-		device := api.Group("/device")
+		device := protected.Group("/device")
 		{
-			// 获取包列表
 			device.GET("/package/clear", handlers.ClearPackage)
 			device.GET("/packages", handlers.GetPackages)
-			// 获取截屏
 			device.GET("/screencap", handlers.Screencap)
-			// 上传文件
 			device.POST("/push", handlers.Push)
-			// 拉取文件
 			device.GET("/pull", handlers.Pull)
-			// 获取目录
 			device.GET("/dir", handlers.Dir)
-			// 获取文件详情
 			device.GET("/stat", handlers.Stat)
-			// 模拟输入
 			device.POST("/input", handlers.Input)
-			// 获取屏幕尺寸
 			device.GET("/window/size", handlers.WindowSize)
-			// 安卓 APK
 			device.POST("/install", handlers.Install)
 
-			// 处理websocket
 			device.GET("/shell/ws", func(c *gin.Context) {
 				handlers.WsHandler(c.Writer, c.Request)
 			})

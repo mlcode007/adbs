@@ -5,12 +5,21 @@
 <script>
 import { windowSize } from '../api/devices.js'
 import { config } from '../plugins/axios.js'
+import { getToken } from '@/utils/auth'
+
+function screencapURL(serial, bust) {
+  const base = (config.baseURL || '') + '/api/device/screencap?channel=shell&serial=' + encodeURIComponent(serial || '')
+  const t = getToken()
+  const auth = t ? '&token=' + encodeURIComponent(t) : ''
+  const cache = bust ? '&time=' + new Date().getTime() : ''
+  return base + auth + cache
+}
 
 export default {
-  name: 'Screencap',
-  data() {
+    name: 'Screencap',
+    data() {
     return {
-      imageSrc: config.baseURL + '/api/device/screencap',
+      imageSrc: '',
       width: "200px",
       height: "400px"
     }
@@ -20,7 +29,7 @@ export default {
   },
   methods: {
     timer: function () {
-        this.imageSrc =  config.baseURL + "/api/device/screencap?channel=shell&serial=" + this.serial + "&time=" + new Date().getTime();
+        this.imageSrc = screencapURL(this.serial, true)
     }
   },
   props: {
@@ -41,7 +50,7 @@ export default {
       }
 
     });
-    this.imageSrc = config.baseURL + "/api/device/screencap?channel=shell&serial=" + this.serial;
+    this.imageSrc = screencapURL(this.serial, false)
   }
 }
 </script>

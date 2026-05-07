@@ -1,7 +1,11 @@
-import { config } from '../plugins/axios.js'
+import { getToken } from '@/utils/auth'
 
 export const shell = serial => {
-    return new WebSocket(  window.location.protocol === "https:" ? "wss://" : "ws://" + window.location.hostname + ":" + window.location.port +  '/api/device/shell/ws?serial=' + serial)
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  const token = getToken()
+  const q = 'serial=' + encodeURIComponent(serial || '') + (token ? '&token=' + encodeURIComponent(token) : '')
+  return new WebSocket(proto + '//' + host + '/api/device/shell/ws?' + q)
 }
 
 export default {
