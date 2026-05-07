@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"adbs/api/handlers"
@@ -22,6 +23,9 @@ func Init() *gin.Engine {
 	// 开启压缩
 	//r.Use(gzip.Gzip(gzip.DefaultCompression))
 	gin.SetMode("debug")
+
+	// uiautomator2 HTTP 桥：统一走 :8081/u2 → 本机 uvicorn（默认 127.0.0.1:18082）
+	registerU2Routes(r)
 
 	api := r.Group("/api")
 	{
@@ -66,12 +70,13 @@ func Init() *gin.Engine {
 		}
 	}
 
-	//r.LoadHTMLGlob("templates/*")
-	r.LoadHTMLFiles("templates/index.html")
+	// 首页优先使用 frontend 构建产物 static/index.html；未构建时回退 templates/index.html
 	r.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", gin.H{
-			"title": "Main website",
-		})
+		if _, err := os.Stat("static/index.html"); err == nil {
+			c.File("static/index.html")
+			return
+		}
+		c.File("templates/index.html")
 	})
 
 	r.Static("/static", "static")

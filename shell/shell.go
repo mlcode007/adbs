@@ -36,7 +36,9 @@ func Shell(conn *websocket.Conn, serial string) {
 	cmd := exec.Command("adb", "-s", serial, "shell")
 	cmd.Env = append(os.Environ(), "TERM=xterm")
 
-	tty, err := pty.Start(cmd)
+	// 不用默认的 Setsid+Setctty：从桌面/GUI 拉起的 HTTP 服务进程没有合法控制终端时，
+	// pty.Start 会在 fork/exec 触发 "Setctty set but Ctty not valid in child"（macOS/新版 Go 常见）。
+	tty, err := pty.StartWithAttrs(cmd, nil, &syscall.SysProcAttr{})
 	if err != nil {
 		log.Println("Unable to start pty/cmd")
 		_ = conn.WriteMessage(websocket.TextMessage, []byte(err.Error()))

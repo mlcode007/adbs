@@ -13,7 +13,10 @@ func (c Client) Version() (int, error) {
 	}
 
 	if string(resp[0:4]) == OKAY {
-		length, _ := strconv.Atoi(string(resp[4:8]))
+		length, err := adbHexPayloadLen(resp)
+		if err != nil {
+			return 0, err
+		}
 		version, _ := strconv.Atoi(string(resp[8 : 8+length]))
 		return version, nil
 	} else if string(resp[0:4]) == FAIL {

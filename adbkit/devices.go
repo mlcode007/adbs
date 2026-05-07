@@ -99,15 +99,18 @@ func (c Client) Connect(ip string, port int) (bool, error) {
 		return false, err
 	}
 	if string(resp[0:4]) == OKAY {
-		length, _ := strconv.Atoi(string(resp[4:8]))
+		length, err := adbHexPayloadLen(resp)
+		if err != nil {
+			return false, err
+		}
 
 		var res = strings.Trim(string(resp[8:8+length]), "\n")
-		if strings.Contains(res, "failed to connect") || strings.Contains(res, "unable to connect to") {
+		lower := strings.ToLower(res)
+		// 仅当明确失败时返回 error；成功文案可能是 "connected to" / "Connected to" / 各语言，避免误报
+		if strings.Contains(lower, "failed to connect") || strings.Contains(lower, "unable to connect to") {
 			return false, errors.New("failed to connect device")
 		}
-		if strings.Contains(res, "already connected to") || strings.Contains(res, "connected to") {
-			return true, nil
-		}
+		return true, nil
 	} else if string(resp[0:4]) == FAIL {
 		return false, errors.New("adb response: Fail")
 	}
@@ -121,7 +124,10 @@ func (c Client) Disconnect(serial string) (bool, error) {
 		return false, err
 	}
 	if string(resp[0:4]) == OKAY {
-		length, _ := strconv.Atoi(string(resp[4:8]))
+		length, err := adbHexPayloadLen(resp)
+		if err != nil {
+			return false, err
+		}
 		var res = strings.Trim(string(resp[8:8+length]), "\n")
 		if strings.Contains(res, "No such device") {
 			return false, errors.New("no such device")

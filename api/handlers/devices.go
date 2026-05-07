@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"adbs/adbkit"
 	"adbs/shell"
@@ -16,6 +19,8 @@ import (
 
 const CLENT_IP = "127.0.0.1"
 const CLENT_PORT = 5037
+
+const adbConnectTimeout = 5 * time.Second
 
 // GetDevices 获取多个项目
 func GetDevices(c *gin.Context) {
@@ -34,34 +39,43 @@ func GetDevices(c *gin.Context) {
 	}
 }
 
-// ConnectDevice 连接设备
+// ConnectDevice 连接设备：与本机手动执行 `adb connect IP[:端口]` 一致（默认端口 5555），无需先在终端连过。
 func ConnectDevice(c *gin.Context) {
-	var message = "success"
-
-	ip := c.PostForm("ip")
-	if ip == "" {
+	raw := strings.TrimSpace(c.PostForm("ip"))
+	if raw == "" {
 		c.JSON(http.StatusOK, gin.H{"message": "IP Empty"})
 		return
 	}
-	ips := strings.Split(ip, ":")
-	if net.ParseIP(ips[0]) == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "IP Error"})
-		return
+	addr := raw
+	if !strings.Contains(addr, ":") {
+		addr = addr + ":5555"
 	}
 
-	var port int
-	if len(ips) > 1 {
-		port, _ = strconv.Atoi(ips[1])
-		ip = ips[0]
-	} else {
-		port = 5555
-	}
-	bo, err := adbkit.New(CLENT_IP, CLENT_PORT).Connect(ip, port)
-	if err != nil || !bo {
-		c.JSON(http.StatusBadRequest, gin.H{"message": fmt.Sprintf("devices connect: %s", err.Error())})
+	ctx, cancel := context.WithTimeout(context.Background(), adbConnectTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "adb", "connect", addr)
+	out, err := cmd.CombinedOutput()
+	outStr := strings.TrimSpace(string(out))
+	lower := strings.ToLower(outStr)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			c.JSON(http.StatusRequestTimeout, gin.H{
+				"message": "设备连接失败：5秒内无响应，请检查地址或设备是否在线",
+			})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": fmt.Sprintf("adb connect 失败: %v", err),
+			"output":  outStr,
+		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": message})
+	if strings.Contains(lower, "failed to connect") || strings.Contains(lower, "cannot connect") ||
+		strings.Contains(lower, "unable to connect") {
+		c.JSON(http.StatusBadRequest, gin.H{"message": outStr, "output": outStr})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "success", "output": outStr})
 }
 
 // DisconnectDevice 断开设备

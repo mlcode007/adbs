@@ -11,7 +11,7 @@ type Callback func(buf []byte, err error)
 
 func (c Client) Callback(command string, callback Callback) error {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", c.Host, c.Port))
-	if err != err || conn == nil {
+	if err != nil || conn == nil {
 		return err
 	}
 
@@ -35,7 +35,7 @@ func (c Client) Callback(command string, callback Callback) error {
 
 	// 写入命令
 	_, err = conn.Write([]byte(prefix + command))
-	if err != err {
+	if err != nil {
 		return err
 	}
 
@@ -45,7 +45,7 @@ func (c Client) Callback(command string, callback Callback) error {
 // Transport 连接一个设备
 func (c Client) Transport(serial string) (conn net.Conn, err error) {
 	conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", c.Host, c.Port))
-	if err != err || conn == nil {
+	if err != nil || conn == nil {
 		return nil, err
 	}
 
@@ -64,7 +64,7 @@ func (c Client) Transport(serial string) (conn net.Conn, err error) {
 	// 写入命令
 	command := "host:transport:" + serial
 	_, err = conn.Write(EncodeCommend(command))
-	if err != err {
+	if err != nil {
 		return nil, err
 	}
 

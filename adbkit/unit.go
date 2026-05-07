@@ -6,6 +6,18 @@ import (
 	"strings"
 )
 
+// adb 同步应答中第 5～8 字节为 4 位十六进制 ASCII 长度（旧代码误用十进制 Atoi 会导致解析错误）。
+func adbHexPayloadLen(resp []byte) (int, error) {
+	if len(resp) < 8 {
+		return 0, fmt.Errorf("adb response too short")
+	}
+	n, err := strconv.ParseUint(string(resp[4:8]), 16, 32)
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
 // EncodeCommend 对命令进行编码
 func EncodeCommend(command string) []byte {
 	prefix := strings.ToUpper("0000" + fmt.Sprintf("%X", len(command)))
