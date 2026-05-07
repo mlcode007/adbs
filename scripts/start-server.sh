@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# adbs 服务器后台启动：释放端口 → PATH/GOPROXY → nohup go run .（脚本立即退出，进程常驻）
+# adbs 服务器后台启动：前端打包 → 释放端口 → PATH/GOPROXY → nohup go run .（脚本立即退出，进程常驻）
 # 用法：
 #   ./scripts/start-server.sh
 #   ADBS_PORT=8080 ./scripts/start-server.sh
+#   ADBS_SKIP_FRONTEND_BUILD=1 ./scripts/start-server.sh   # 跳过 npm 构建，沿用已有 static/
 # 日志：../logs/adbs.log   PID：../run/adbs.pid
 # 停止：kill "$(cat run/adbs.pid)"  或再次运行前由 free_port 占用端口时会释放
 
@@ -47,6 +48,8 @@ if ! command -v go >/dev/null 2>&1; then
   echo "[adbs] 示例: Debian/Ubuntu: sudo apt install -y golang-go  或从 https://go.dev/dl/ 安装到 /usr/local/go 后 export PATH=/usr/local/go/bin:\$PATH" >&2
   exit 1
 fi
+
+bash "${ROOT}/scripts/build-frontend.sh"
 
 if [[ -f "$PID_FILE" ]]; then
   old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"

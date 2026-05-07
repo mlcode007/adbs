@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# adbs 一键启动：释放 ADBS_PORT（默认 18081）→ PATH/GOPROXY →（可选）自动起 u2 bridge → go run .
+# adbs 一键启动：前端打包 → 释放 ADBS_PORT（默认 18081）→ PATH/GOPROXY →（可选）自动起 u2 bridge → go run .
 # 用法：在终端执行
 #   ./scripts/start.sh
-# 或：
-#   bash scripts/start.sh
+#   ADBS_SKIP_FRONTEND_BUILD=1 ./scripts/start.sh   # 跳过 npm 构建
 
 set -euo pipefail
 
@@ -41,6 +40,8 @@ if ! command -v go >/dev/null 2>&1; then
   echo "[adbs] 示例: Debian/Ubuntu: sudo apt install -y golang-go  或从 https://go.dev/dl/ 安装到 /usr/local/go 后 export PATH=/usr/local/go/bin:\$PATH" >&2
   exit 1
 fi
+
+bash "${ROOT}/scripts/build-frontend.sh"
 
 echo "[adbs] 启动中（本机: http://127.0.0.1:${ADBS_PORT}  按 Ctrl+C 停止）"
 exec go run .
