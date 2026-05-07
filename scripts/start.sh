@@ -10,7 +10,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-export PATH="/opt/homebrew/bin:/usr/local/go/bin:${PATH:-}"
+# macOS Homebrew + 官方包常见安装路径；Linux 常见 /usr/local/go、snap、用户 GOPATH/bin
+export PATH="/opt/homebrew/bin:/usr/local/go/bin:/snap/bin:${HOME}/go/bin:${PATH:-}"
 export GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
 # 设为 0 可禁用自动启动 python_u2_bridge（仅 Go + /u2 反向代理需你先手动起 uvicorn）
 export U2_AUTO_START="${U2_AUTO_START:-1}"
@@ -36,7 +37,8 @@ free_port() {
 free_port "$ADBS_PORT"
 
 if ! command -v go >/dev/null 2>&1; then
-  echo "[adbs] 错误: 未找到 go，请安装 Go 或检查 PATH。" >&2
+  echo "[adbs] 错误: 未找到 go，请安装 Go 或把 go 加入 PATH。" >&2
+  echo "[adbs] 示例: Debian/Ubuntu: sudo apt install -y golang-go  或从 https://go.dev/dl/ 安装到 /usr/local/go 后 export PATH=/usr/local/go/bin:\$PATH" >&2
   exit 1
 fi
 
