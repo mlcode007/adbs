@@ -24,7 +24,7 @@ func Init() *gin.Engine {
 	//r.Use(gzip.Gzip(gzip.DefaultCompression))
 	gin.SetMode("debug")
 
-	// uiautomator2 HTTP 桥：统一走 :8081/u2 → 本机 uvicorn（默认 127.0.0.1:18082）
+	// uiautomator2 HTTP 桥：统一走 Go 监听端口（默认 :18081）/u2 → 本机 uvicorn（默认 127.0.0.1:18082）
 	registerU2Routes(r)
 
 	api := r.Group("/api")

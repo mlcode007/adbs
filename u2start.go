@@ -9,7 +9,7 @@ import (
 )
 
 // 设置 U2_AUTO_START=1 时，在启动 Go 服务前拉起 python_u2_bridge（监听 127.0.0.1:U2_INTERNAL_PORT，默认 18082）。
-// 对外仍只访问 http://<host>:8081/u2/... ，无需再暴露第二端口。
+// 对外仍只访问 http://<host>:ADBS_PORT/u2/...（默认 18081），无需再暴露第二端口。
 func maybeStartU2Bridge() {
 	if os.Getenv("U2_AUTO_START") != "1" {
 		return
@@ -42,7 +42,11 @@ func maybeStartU2Bridge() {
 		log.Printf("u2 auto-start: %v", err)
 		return
 	}
-	log.Printf("u2 bridge started pid=%d on 127.0.0.1:%s — use http://<host>:8081/u2/", cmd.Process.Pid, port)
+	ext := os.Getenv("ADBS_PORT")
+	if ext == "" {
+		ext = "18081"
+	}
+	log.Printf("u2 bridge started pid=%d on 127.0.0.1:%s — use http://<host>:%s/u2/", cmd.Process.Pid, port, ext)
 	go func() { _ = cmd.Wait() }()
 
 	time.Sleep(400 * time.Millisecond)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-通过 u2 bridge（Go :8081 下的 /u2）连接设备，可选点击坐标后保存整屏截图。
+通过 u2 bridge（Go 默认 :18081 下的 /u2）连接设备，可选点击坐标后保存整屏截图。
 
 使用前：
-  - 已启动 adbs，且能访问 http://127.0.0.1:8081/u2/health
+  - 已启动 adbs，且能访问 http://127.0.0.1:18081/u2/health
   - adb devices 中已有目标机（USB 或 adb connect）
 
 示例：
@@ -49,8 +49,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="u2 bridge：连接设备并保存截图")
     parser.add_argument(
         "--base",
-        default=os.environ.get("U2_BASE", "http://127.0.0.1:8081/u2"),
-        help="u2 前缀地址（默认 http://127.0.0.1:8081/u2）",
+        default=os.environ.get("U2_BASE", "http://127.0.0.1:18081/u2"),
+        help="u2 前缀地址（默认 http://127.0.0.1:18081/u2）",
     )
     parser.add_argument(
         "--serial",
@@ -88,7 +88,6 @@ def main() -> int:
     if not serial:
         print("请指定 --serial 或设置环境变量 ADEVICE_SERIAL", file=sys.stderr)
         return 2
-image.png
     try:
         _post_json(f"{base}/session/connect", {"serial": serial})
     except urllib.error.HTTPError as e:

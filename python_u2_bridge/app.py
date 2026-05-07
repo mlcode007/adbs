@@ -1,9 +1,9 @@
 """
 与 adbs 同机运行的 uiautomator2 HTTP 桥（建议仅监听回环口，由 Go 反向代理对外）。
 
-对外统一只开 Go 的端口（默认 8081），Python 路径挂在其下前缀 /u2：
-  http://<主机>:8081/u2/health
-  http://<主机>:8081/u2/click  （等同下方 uvicorn 根路径 /click）
+对外统一只开 Go 的端口（默认 18081，环境变量 ADBS_PORT），Python 路径挂在其下前缀 /u2：
+  http://<主机>:18081/u2/health
+  http://<主机>:18081/u2/click  （等同下方 uvicorn 根路径 /click）
 
 方式一（推荐，单一入口）：启动 Go 前设置环境变量自动拉起本服务（仅绑定本机）：
   export U2_AUTO_START=1
@@ -16,7 +16,7 @@
   # 另开终端 go run .  （Go 默认把 /u2 转发到 http://127.0.0.1:18082，可用 U2_BACKEND 覆盖）
 
 原脚本改造示例：
-  requests.post("http://主机:8081/u2/click", json={"serial":"...","x":100,"y":200})
+  requests.post("http://主机:18081/u2/click", json={"serial":"...","x":100,"y":200})
 """
 
 from __future__ import annotations

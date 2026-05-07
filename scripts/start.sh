@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# adbs 一键启动：释放 8081 → 设置 PATH/GOPROXY →（可选）自动起 u2 bridge → go run .
+# adbs 一键启动：释放 ADBS_PORT（默认 18081）→ PATH/GOPROXY →（可选）自动起 u2 bridge → go run .
 # 用法：在终端执行
 #   ./scripts/start.sh
 # 或：
@@ -14,6 +14,7 @@ export PATH="/opt/homebrew/bin:/usr/local/go/bin:${PATH:-}"
 export GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
 # 设为 0 可禁用自动启动 python_u2_bridge（仅 Go + /u2 反向代理需你先手动起 uvicorn）
 export U2_AUTO_START="${U2_AUTO_START:-1}"
+export ADBS_PORT="${ADBS_PORT:-18081}"
 
 echo "[adbs] 目录: $ROOT"
 echo "[adbs] U2_AUTO_START=$U2_AUTO_START  GOPROXY=$GOPROXY"
@@ -32,12 +33,12 @@ free_port() {
   fi
 }
 
-free_port 8081
+free_port "$ADBS_PORT"
 
 if ! command -v go >/dev/null 2>&1; then
   echo "[adbs] 错误: 未找到 go，请安装 Go 或检查 PATH。" >&2
   exit 1
 fi
 
-echo "[adbs] 启动中（本机: http://127.0.0.1:8081  按 Ctrl+C 停止）"
+echo "[adbs] 启动中（本机: http://127.0.0.1:${ADBS_PORT}  按 Ctrl+C 停止）"
 exec go run .

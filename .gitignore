@@ -13,3 +13,7 @@
 
 .idea/
 ./scripts/
+
+# 后台启动脚本写入
+logs/
+run/

@@ -9,9 +9,9 @@ module.exports = defineConfig({
   devServer: {
     port: 8090,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8081', changeOrigin: true },
-      '/u2': { target: 'http://127.0.0.1:8081', changeOrigin: true },
-      '/static': { target: 'http://127.0.0.1:8081', changeOrigin: true }
+      '/api': { target: 'http://127.0.0.1:18081', changeOrigin: true },
+      '/u2': { target: 'http://127.0.0.1:18081', changeOrigin: true },
+      '/static': { target: 'http://127.0.0.1:18081', changeOrigin: true }
     }
   }
 })

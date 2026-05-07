@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// u2BackendURL 为 python_u2_bridge（uvicorn）监听地址，仅本机回环，由 Go 在 :8081 上以 /u2 对外转发。
+// u2BackendURL 为 python_u2_bridge（uvicorn）监听地址，仅本机回环，由 Go 在 ADBS_PORT（默认 18081）上以 /u2 对外转发。
 // 环境变量：
 //   U2_BACKEND     完整 URL，如 http://127.0.0.1:18082（优先级最高）
 //   U2_INTERNAL_PORT  未设置 U2_BACKEND 时使用，默认 18082
