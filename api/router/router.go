@@ -27,8 +27,8 @@ func Init() *gin.Engine {
 
 	// uiautomator2 HTTP 桥：统一走 Go 监听端口（默认 :18081）/u2 → 本机 uvicorn（默认 127.0.0.1:18082）
 	registerU2Routes(r)
-	// 附加服务：/u3 → 本机默认 127.0.0.1:18083（可用 U3_BACKEND / U3_INTERNAL_PORT 覆盖）
-	registerU3Routes(r)
+	// 附加服务：/u5 → 本机默认 127.0.0.1:18085（可用 U5_BACKEND / U5_INTERNAL_PORT 覆盖）
+	registerU5Routes(r)
 
 	api := r.Group("/api")
 	api.POST("/auth/login", handlers.Login)
