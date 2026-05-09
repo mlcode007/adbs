@@ -27,8 +27,10 @@ func Init() *gin.Engine {
 
 	// uiautomator2 HTTP 桥：统一走 Go 监听端口（默认 :18081）/u2 → 本机 uvicorn（默认 127.0.0.1:18082）
 	registerU2Routes(r)
-	// 附加服务：/u5 → 本机默认 127.0.0.1:18085（可用 U5_BACKEND / U5_INTERNAL_PORT 覆盖）
-	registerU5Routes(r)
+	// 控制台 SPA：/u5、/u5/、/u5/assets（勿与下方 /u5-bridge 混用）
+	registerU5SPARoutes(r)
+	// 附加后端：/u5-bridge → 本机默认 127.0.0.1:18085（可用 U5_BACKEND / U5_INTERNAL_PORT 覆盖）
+	registerU5BridgeRoutes(r)
 
 	api := r.Group("/api")
 	api.POST("/auth/login", handlers.Login)
@@ -79,6 +81,21 @@ func Init() *gin.Engine {
 	r.Static("/assets", "static/assets")
 
 	return r
+}
+
+// registerU5SPARoutes 部署在子路径 /u5 时的控制台入口（与 registerU5BridgeRoutes 分离）
+func registerU5SPARoutes(r *gin.Engine) {
+	r.GET("/u5", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/u5/")
+	})
+	r.GET("/u5/", func(c *gin.Context) {
+		if _, err := os.Stat("static/index.html"); err == nil {
+			c.File("static/index.html")
+			return
+		}
+		c.Status(http.StatusNotFound)
+	})
+	r.Static("/u5/assets", "static/assets")
 }
 
 func Cors() gin.HandlerFunc {

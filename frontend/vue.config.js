@@ -14,6 +14,7 @@ module.exports = defineConfig({
       '/api': { target: 'http://127.0.0.1:18081', changeOrigin: true },
       '/u2': { target: 'http://127.0.0.1:18081', changeOrigin: true },
       '/u5': { target: 'http://127.0.0.1:18081', changeOrigin: true },
+      '/u5-bridge': { target: 'http://127.0.0.1:18081', changeOrigin: true },
       '/static': { target: 'http://127.0.0.1:18081', changeOrigin: true }
     }
   }
