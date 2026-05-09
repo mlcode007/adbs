@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"adbs/api/handlers"
@@ -95,8 +96,23 @@ func registerU5SPARoutes(r *gin.Engine) {
 		}
 		c.Status(http.StatusNotFound)
 	})
-	// Vue 构建除 assets 外还有 js/、css/ 等目录，仅挂 /u5/assets 会导致 chunk 404
-	r.Static("/u5", "static")
+	// 不可使用 r.Static("/u5","static")：会与 GET /u5/ 在 Gin 路由树上冲突（catch-all panic）
+	registerU5StaticSubdirs(r)
+}
+
+// registerU5StaticSubdirs 将 static 下各子目录挂到 /u5/<dirname>/（js、css、assets、fonts 等）
+func registerU5StaticSubdirs(r *gin.Engine) {
+	entries, err := os.ReadDir("static")
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		r.Static("/u5/"+name, filepath.Join("static", name))
+	}
 }
 
 func Cors() gin.HandlerFunc {
