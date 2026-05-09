@@ -75,6 +75,8 @@ func Init() *gin.Engine {
 	})
 
 	r.Static("/static", "static")
+	// 与 Vue 生产包 publicPath「./」生成的资源路径 /assets/* 对齐（首页在 / 打开时）
+	r.Static("/assets", "static/assets")
 
 	return r
 }
