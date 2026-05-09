@@ -27,7 +27,7 @@ func Init() *gin.Engine {
 
 	// uiautomator2 HTTP 桥：统一走 Go 监听端口（默认 :18081）/u2 → 本机 uvicorn（默认 127.0.0.1:18082）
 	registerU2Routes(r)
-	// 控制台 SPA：/u5、/u5/、/u5/assets（勿与下方 /u5-bridge 混用）
+	// 控制台 SPA：/u5/* 映射整个 static（含 js/css/assets，勿与 /u5-bridge 混用）
 	registerU5SPARoutes(r)
 	// 附加后端：/u5-bridge → 本机默认 127.0.0.1:18085（可用 U5_BACKEND / U5_INTERNAL_PORT 覆盖）
 	registerU5BridgeRoutes(r)
@@ -95,7 +95,8 @@ func registerU5SPARoutes(r *gin.Engine) {
 		}
 		c.Status(http.StatusNotFound)
 	})
-	r.Static("/u5/assets", "static/assets")
+	// Vue 构建除 assets 外还有 js/、css/ 等目录，仅挂 /u5/assets 会导致 chunk 404
+	r.Static("/u5", "static")
 }
 
 func Cors() gin.HandlerFunc {
