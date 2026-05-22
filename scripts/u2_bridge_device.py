@@ -188,11 +188,28 @@ class BridgeDevice:
         except urllib.error.HTTPError as e:
             raise RuntimeError(e.read().decode(errors="replace")) from e
 
-    def click_text(self, text: str, timeout: float = 10.0) -> None:
+    def click_text(
+        self,
+        text: str,
+        timeout: float = 10.0,
+        contains: bool = True,
+    ) -> dict[str, Any]:
+        """点击文本控件。
+
+        - ``contains=True``（默认）：精确未命中时桥服务端会回退到 ``textContains`` 包含匹配。
+        - ``contains=False``：仅做精确匹配，与旧行为一致。
+
+        返回服务端 JSON，含 ``matched_by``（``text`` / ``textContains``）。
+        """
         try:
-            self._post_json(
+            return self._post_json(
                 "/click_text",
-                {"serial": self._serial, "text": text, "timeout": timeout},
+                {
+                    "serial": self._serial,
+                    "text": text,
+                    "timeout": timeout,
+                    "contains": contains,
+                },
             )
         except urllib.error.HTTPError as e:
             raise RuntimeError(e.read().decode(errors="replace")) from e
@@ -284,23 +301,39 @@ class BridgeDevice:
             raise RuntimeError(e.read().decode(errors="replace")) from e
         return bool(r.get("found"))
 
-    def has_text(self, text: str) -> bool:
-        """当前界面是否包含给定文本（不等待）。"""
+    def has_text(self, text: str, contains: bool = True) -> bool:
+        """当前界面是否包含给定文本（不等待）。
+
+        ``contains=True`` 时桥服务端会在精确未命中后再尝试包含匹配。
+        """
         try:
             r = self._post_json(
                 "/has_text",
-                {"serial": self._serial, "text": text},
+                {"serial": self._serial, "text": text, "contains": contains},
             )
         except urllib.error.HTTPError as e:
             raise RuntimeError(e.read().decode(errors="replace")) from e
         return bool(r.get("exists"))
 
-    def wait_text(self, text: str, timeout: float = 10.0) -> bool:
-        """等待给定文本出现，返回是否找到。"""
+    def wait_text(
+        self,
+        text: str,
+        timeout: float = 10.0,
+        contains: bool = True,
+    ) -> bool:
+        """等待给定文本出现，返回是否找到。
+
+        ``contains=True`` 时精确等待失败会再用包含匹配判断一次。
+        """
         try:
             r = self._post_json(
                 "/wait_text",
-                {"serial": self._serial, "text": text, "timeout": timeout},
+                {
+                    "serial": self._serial,
+                    "text": text,
+                    "timeout": timeout,
+                    "contains": contains,
+                },
             )
         except urllib.error.HTTPError as e:
             raise RuntimeError(e.read().decode(errors="replace")) from e

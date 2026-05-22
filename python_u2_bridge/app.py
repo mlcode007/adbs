@@ -79,16 +79,53 @@ class TextClickBody(BaseModel):
     serial: str
     text: str
     timeout: float = 10.0
+    contains: bool = Field(
+        True,
+        description="精确未命中时是否回退到 textContains 包含匹配；False 则只做精确匹配",
+    )
 
 
 @app.post("/click_text")
 def click_text(body: TextClickBody):
     d = get_device(body.serial)
+
     el = d(text=body.text)
-    if not el.wait(timeout=body.timeout):
-        raise HTTPException(404, detail=f'no widget text="{body.text}"')
-    el.click()
-    return {"ok": True}
+    if el.wait(timeout=body.timeout):
+        el.click()
+        return {"ok": True, "matched_by": "text"}
+
+    if body.contains:
+        el2 = d(textContains=body.text)
+        if el2.exists:
+            el2.click()
+            return {"ok": True, "matched_by": "textContains"}
+
+    # 收集页面上现有 text，便于调试为什么没匹配上
+    similar: list[str] = []
+    try:
+        xml = d.dump_hierarchy()
+        import re
+
+        seen: set[str] = set()
+        for m in re.finditer(r'text="([^"]*)"', xml):
+            t = m.group(1)
+            if t and t not in seen:
+                seen.add(t)
+                if body.text and body.text in t:
+                    similar.append(t)
+        if not similar:
+            similar = [t for t in seen if t][:20]
+    except Exception:
+        pass
+
+    raise HTTPException(
+        404,
+        detail={
+            "message": f'no widget text="{body.text}"',
+            "contains_tried": body.contains,
+            "similar_or_visible_texts": similar,
+        },
+    )
 
 
 class ShellBody(BaseModel):
@@ -173,21 +210,38 @@ class TextBody(BaseModel):
     serial: str
     text: str
     timeout: float = 10.0
+    contains: bool = Field(
+        True,
+        description="精确未命中时是否回退到 textContains 包含匹配；False 则只做精确匹配",
+    )
 
 
 @app.post("/has_text")
 def has_text(body: TextBody):
-    """当前界面是否包含给定文本（不等待）。"""
+    """当前界面是否包含给定文本（不等待）。
+
+    返回 ``matched_by`` 指明命中方式：``text`` / ``textContains`` / ``none``。
+    """
     d = get_device(body.serial)
-    return {"ok": True, "exists": bool(d(text=body.text).exists)}
+    if bool(d(text=body.text).exists):
+        return {"ok": True, "exists": True, "matched_by": "text"}
+    if body.contains and bool(d(textContains=body.text).exists):
+        return {"ok": True, "exists": True, "matched_by": "textContains"}
+    return {"ok": True, "exists": False, "matched_by": "none"}
 
 
 @app.post("/wait_text")
 def wait_text(body: TextBody):
-    """等待给定文本出现，返回 found=true/false。"""
+    """等待给定文本出现，返回 found=true/false。
+
+    精确等待未命中且 ``contains=true`` 时，会再用 ``textContains`` 立即判断一次。
+    """
     d = get_device(body.serial)
-    found = bool(d(text=body.text).wait(timeout=body.timeout))
-    return {"ok": True, "found": found}
+    if bool(d(text=body.text).wait(timeout=body.timeout)):
+        return {"ok": True, "found": True, "matched_by": "text"}
+    if body.contains and bool(d(textContains=body.text).exists):
+        return {"ok": True, "found": True, "matched_by": "textContains"}
+    return {"ok": True, "found": False, "matched_by": "none"}
 
 
 class XPathBody(BaseModel):
