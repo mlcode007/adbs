@@ -94,25 +94,37 @@ class TextClickBody(BaseModel):
 
 @app.post("/click_text")
 def click_text(body: TextClickBody):
+    """点击文本控件。
+
+    与 /has_text、/wait_text 一致，一律返回 HTTP 200，业务结果通过返回体表达：
+      成功： {"ok": true, "clicked": true, "matched_by": "text"|"textContains"}
+      失败： {"ok": true, "clicked": false, "matched_by": "none", "message": "..."}
+    （这里 ``ok`` 表示「请求处理本身正常」，``clicked`` 表示「是否真的点到了」，
+     不再用 HTTP 404 表示业务未命中——避免与「路由不存在」语义混淆，
+     也避免被前置 nginx/监控当成异常状态码看待。）
+    """
     d = get_device(body.serial)
 
     el = d(text=body.text)
     if el.wait(timeout=body.timeout):
         el.click()
-        return {"ok": True, "matched_by": "text"}
+        return {"ok": True, "clicked": True, "matched_by": "text"}
 
     if body.contains:
         el2 = d(textContains=body.text)
         if el2.exists:
             el2.click()
-            return {"ok": True, "matched_by": "textContains"}
+            return {"ok": True, "clicked": True, "matched_by": "textContains"}
 
-    detail: dict[str, Any] = {
+    result: dict[str, Any] = {
+        "ok": True,
+        "clicked": False,
+        "matched_by": "none",
         "message": f'no widget text="{body.text}"',
         "contains_tried": body.contains,
     }
 
-    # 仅在显式 debug=true 时收集页面上现有 text，避免拉长正常 404 响应耗时
+    # 仅在显式 debug=true 时收集页面上现有 text，避免拉长正常未命中响应耗时
     if body.debug:
         similar: list[str] = []
         try:
@@ -130,9 +142,9 @@ def click_text(body: TextClickBody):
                 similar = [t for t in seen if t][:20]
         except Exception:
             pass
-        detail["similar_or_visible_texts"] = similar
+        result["similar_or_visible_texts"] = similar
 
-    raise HTTPException(404, detail=detail)
+    return result
 
 
 class ShellBody(BaseModel):
@@ -265,13 +277,16 @@ class XPathBody(BaseModel):
 def xpath_action(body: XPathBody):
     """对 XPath 表达式执行常用动作。
 
-    action：
-      - exists   立即返回 {exists: bool}
-      - wait     在 timeout 内等待，返回 {found: bool}
-      - click    在 timeout 内等待并点击；找不到 → 404
-      - get_text 在 timeout 内等待并取文本；找不到 → 404
-      - info     在 timeout 内等待并返回节点 info；找不到 → 404
-      - all      返回所有匹配节点 info 列表
+    所有动作均返回 HTTP 200，业务结果通过返回体的字段表达；
+    只有「请求本身无效」（XPath 语法错误 / unknown action）才返回 400。
+
+    action 与返回 schema：
+      - exists    {ok, exists: bool}
+      - wait      {ok, found: bool}
+      - click     {ok, found: bool, clicked: bool, message?: str}
+      - get_text  {ok, found: bool, text: str|null, message?: str}
+      - info      {ok, found: bool, info: dict|null, message?: str}
+      - all       {ok, count: int, items: list[dict]}
     """
     d = get_device(body.serial)
     try:
@@ -280,27 +295,48 @@ def xpath_action(body: XPathBody):
         raise HTTPException(400, detail=f"bad xpath: {e}") from e
 
     act = (body.action or "exists").strip().lower()
+
     if act == "exists":
         return {"ok": True, "exists": bool(x.exists)}
+
     if act == "wait":
         return {"ok": True, "found": bool(x.wait(timeout=body.timeout))}
+
     if act == "click":
         if not x.wait(timeout=body.timeout):
-            raise HTTPException(404, detail=f"no node matched xpath: {body.xpath}")
+            return {
+                "ok": True,
+                "found": False,
+                "clicked": False,
+                "message": f"no node matched xpath: {body.xpath}",
+            }
         x.click()
-        return {"ok": True}
+        return {"ok": True, "found": True, "clicked": True}
+
     if act == "get_text":
         if not x.wait(timeout=body.timeout):
-            raise HTTPException(404, detail=f"no node matched xpath: {body.xpath}")
-        return {"ok": True, "text": x.get_text()}
+            return {
+                "ok": True,
+                "found": False,
+                "text": None,
+                "message": f"no node matched xpath: {body.xpath}",
+            }
+        return {"ok": True, "found": True, "text": x.get_text()}
+
     if act == "info":
         el = x.wait(timeout=body.timeout)
         if not el:
-            raise HTTPException(404, detail=f"no node matched xpath: {body.xpath}")
+            return {
+                "ok": True,
+                "found": False,
+                "info": None,
+                "message": f"no node matched xpath: {body.xpath}",
+            }
         info = getattr(el, "info", None)
         if info is None:
             info = dict(getattr(el, "attrib", {}) or {})
-        return {"ok": True, "info": info}
+        return {"ok": True, "found": True, "info": info}
+
     if act == "all":
         nodes = x.all() or []
         items = []
@@ -310,6 +346,7 @@ def xpath_action(body: XPathBody):
                 info = dict(getattr(n, "attrib", {}) or {})
             items.append(info)
         return {"ok": True, "count": len(items), "items": items}
+
     raise HTTPException(400, detail=f"unknown action: {body.action}")
 
 

@@ -194,19 +194,25 @@ class BridgeDevice:
         timeout: float = 10.0,
         contains: bool = True,
         debug: bool = False,
+        raise_if_missing: bool = True,
     ) -> dict[str, Any]:
         """点击文本控件。
 
         - ``contains=True``（默认）：精确未命中时桥服务端会回退到 ``textContains`` 包含匹配。
-        - ``contains=False``：仅做精确匹配，与旧行为一致。
-        - ``debug=True``：404 时让服务端 dump 当前页面 text 列表回包，便于排查。
-          注意会额外触发 ``dump_hierarchy``，单次失败请求耗时增加 1~5 秒，
+        - ``contains=False``：仅做精确匹配。
+        - ``debug=True``：未命中时让服务端 dump 当前页面 text 列表回包，便于排查。
+          会额外触发 ``dump_hierarchy``，单次失败请求耗时增加 1~5 秒，
           可能超过前置 nginx/网关 ``proxy_read_timeout`` 而拿到 502/504。
+        - ``raise_if_missing=True``（默认）：未点击到控件时抛 ``LookupError``，
+          与 ``uiautomator2`` 找不到节点抛异常的风格一致；
+          ``False`` 则只返回服务端 JSON，由调用方判断 ``clicked`` 字段。
 
-        返回服务端 JSON，含 ``matched_by``（``text`` / ``textContains``）。
+        服务端始终返回 HTTP 200，body 形如：
+          成功 ``{"ok": True, "clicked": True, "matched_by": "text"|"textContains"}``
+          未命中 ``{"ok": True, "clicked": False, "matched_by": "none", "message": "..."}``
         """
         try:
-            return self._post_json(
+            r = self._post_json(
                 "/click_text",
                 {
                     "serial": self._serial,
@@ -218,6 +224,12 @@ class BridgeDevice:
             )
         except urllib.error.HTTPError as e:
             raise RuntimeError(e.read().decode(errors="replace")) from e
+
+        if raise_if_missing and not r.get("clicked"):
+            raise LookupError(
+                r.get("message") or f'no widget text="{text}" (matched_by=none)'
+            )
+        return r
 
     def shell(self, command: str) -> str:
         try:
@@ -445,7 +457,11 @@ class _Selector:
 
 
 class _XPath:
-    """XPath 代理，封装 /xpath 的各种 action。"""
+    """XPath 代理，封装 /xpath 的各种 action。
+
+    服务端均返回 HTTP 200；找不到节点是业务结果，可在动作方法上用
+    ``raise_if_missing=False`` 关闭抛错（默认与 u2 一致：找不到抛 ``LookupError``）。
+    """
 
     def __init__(self, dev: BridgeDevice, xpath: str) -> None:
         self._dev = dev
@@ -460,15 +476,41 @@ class _XPath:
         r = self._dev.xpath_action(self._xpath, action="wait", timeout=timeout)
         return bool(r.get("found"))
 
-    def click(self, timeout: float = 10.0) -> None:
-        self._dev.xpath_action(self._xpath, action="click", timeout=timeout)
+    def click(self, timeout: float = 10.0, raise_if_missing: bool = True) -> dict[str, Any]:
+        r = self._dev.xpath_action(self._xpath, action="click", timeout=timeout)
+        if raise_if_missing and not r.get("clicked"):
+            raise LookupError(
+                r.get("message") or f"no node matched xpath: {self._xpath}"
+            )
+        return r
 
-    def get_text(self, timeout: float = 10.0) -> str:
+    def get_text(
+        self,
+        timeout: float = 10.0,
+        raise_if_missing: bool = True,
+        default: str = "",
+    ) -> str:
         r = self._dev.xpath_action(self._xpath, action="get_text", timeout=timeout)
-        return str(r.get("text", ""))
+        if not r.get("found"):
+            if raise_if_missing:
+                raise LookupError(
+                    r.get("message") or f"no node matched xpath: {self._xpath}"
+                )
+            return default
+        return str(r.get("text") or "")
 
-    def info(self, timeout: float = 10.0) -> dict[str, Any]:
+    def info(
+        self,
+        timeout: float = 10.0,
+        raise_if_missing: bool = True,
+    ) -> dict[str, Any]:
         r = self._dev.xpath_action(self._xpath, action="info", timeout=timeout)
+        if not r.get("found"):
+            if raise_if_missing:
+                raise LookupError(
+                    r.get("message") or f"no node matched xpath: {self._xpath}"
+                )
+            return {}
         return dict(r.get("info") or {})
 
     def all(self) -> list[dict[str, Any]]:
@@ -505,17 +547,18 @@ if __name__ == "__main__":
     import sys
     try:
         base_url = 'https://caiji-adb-console-itoamms.smzdm.com/u2'
-        serial = '10.131.14.5'
+        serial = '10.131.14.15'
         d = connect(serial=serial, base=base_url, insecure=True)
 
         # 1) 推荐：缩短服务端等待，立刻拿到 404，远低于任何 nginx 超时
-        d.click_text(text='首页', timeout=3)
+        # d.click_text(text='首页', timeout=3)
 
         # 2) 想要丰富排错信息时再开 debug（已绕过 nginx 直连时再用）
-        d.click_text(text='首页', timeout=3, debug=True)
+        d.click_text(text='首1页', timeout=3, debug=True)
+
 
         # 3) 严格只精确匹配（关掉 contains 兜底）
-        d.click_text(text='首页', timeout=3, contains=False)
+        # d.click_text(text='首页', timeout=3, contains=False)
 
 
         # d.screenshot()
