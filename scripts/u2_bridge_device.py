@@ -193,11 +193,15 @@ class BridgeDevice:
         text: str,
         timeout: float = 10.0,
         contains: bool = True,
+        debug: bool = False,
     ) -> dict[str, Any]:
         """点击文本控件。
 
         - ``contains=True``（默认）：精确未命中时桥服务端会回退到 ``textContains`` 包含匹配。
         - ``contains=False``：仅做精确匹配，与旧行为一致。
+        - ``debug=True``：404 时让服务端 dump 当前页面 text 列表回包，便于排查。
+          注意会额外触发 ``dump_hierarchy``，单次失败请求耗时增加 1~5 秒，
+          可能超过前置 nginx/网关 ``proxy_read_timeout`` 而拿到 502/504。
 
         返回服务端 JSON，含 ``matched_by``（``text`` / ``textContains``）。
         """
@@ -209,6 +213,7 @@ class BridgeDevice:
                     "text": text,
                     "timeout": timeout,
                     "contains": contains,
+                    "debug": debug,
                 },
             )
         except urllib.error.HTTPError as e:
@@ -502,7 +507,17 @@ if __name__ == "__main__":
         base_url = 'https://caiji-adb-console-itoamms.smzdm.com/u2'
         serial = '10.131.14.5'
         d = connect(serial=serial, base=base_url, insecure=True)
-        d.click_text("首页", timeout=10)
+
+        # 1) 推荐：缩短服务端等待，立刻拿到 404，远低于任何 nginx 超时
+        d.click_text(text='首页', timeout=3)
+
+        # 2) 想要丰富排错信息时再开 debug（已绕过 nginx 直连时再用）
+        d.click_text(text='首页', timeout=3, debug=True)
+
+        # 3) 严格只精确匹配（关掉 contains 兜底）
+        d.click_text(text='首页', timeout=3, contains=False)
+
+
         # d.screenshot()
     except ValueError as e:
         print(e, file=sys.stderr)

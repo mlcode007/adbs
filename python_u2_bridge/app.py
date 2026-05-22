@@ -83,6 +83,13 @@ class TextClickBody(BaseModel):
         True,
         description="精确未命中时是否回退到 textContains 包含匹配；False 则只做精确匹配",
     )
+    debug: bool = Field(
+        False,
+        description=(
+            "为 True 时在 404 detail 里附带页面 text 列表（会额外触发 dump_hierarchy，"
+            "可能让单次失败请求耗时增加 1~5s，注意上游 nginx/网关 proxy_read_timeout）"
+        ),
+    )
 
 
 @app.post("/click_text")
@@ -100,32 +107,32 @@ def click_text(body: TextClickBody):
             el2.click()
             return {"ok": True, "matched_by": "textContains"}
 
-    # 收集页面上现有 text，便于调试为什么没匹配上
-    similar: list[str] = []
-    try:
-        xml = d.dump_hierarchy()
-        import re
+    detail: dict[str, Any] = {
+        "message": f'no widget text="{body.text}"',
+        "contains_tried": body.contains,
+    }
 
-        seen: set[str] = set()
-        for m in re.finditer(r'text="([^"]*)"', xml):
-            t = m.group(1)
-            if t and t not in seen:
-                seen.add(t)
-                if body.text and body.text in t:
-                    similar.append(t)
-        if not similar:
-            similar = [t for t in seen if t][:20]
-    except Exception:
-        pass
+    # 仅在显式 debug=true 时收集页面上现有 text，避免拉长正常 404 响应耗时
+    if body.debug:
+        similar: list[str] = []
+        try:
+            xml = d.dump_hierarchy()
+            import re
 
-    raise HTTPException(
-        404,
-        detail={
-            "message": f'no widget text="{body.text}"',
-            "contains_tried": body.contains,
-            "similar_or_visible_texts": similar,
-        },
-    )
+            seen: set[str] = set()
+            for m in re.finditer(r'text="([^"]*)"', xml):
+                t = m.group(1)
+                if t and t not in seen:
+                    seen.add(t)
+                    if body.text and body.text in t:
+                        similar.append(t)
+            if not similar:
+                similar = [t for t in seen if t][:20]
+        except Exception:
+            pass
+        detail["similar_or_visible_texts"] = similar
+
+    raise HTTPException(404, detail=detail)
 
 
 class ShellBody(BaseModel):
