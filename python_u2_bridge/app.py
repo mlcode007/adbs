@@ -26,7 +26,7 @@ import base64
 from typing import Any
 
 import uiautomator2 as u2
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
@@ -136,6 +136,161 @@ def swipe(body: SwipeBody):
     d = get_device(body.serial)
     d.swipe(body.sx, body.sy, body.ex, body.ey, body.duration)
     return {"ok": True}
+
+
+class SelectorBody(BaseModel):
+    serial: str
+    selector: dict[str, Any] = Field(
+        ...,
+        description='u2 选择器关键字参数，例如 {"text":"首页"} 或 {"resourceId":"com.x:id/y"}',
+    )
+    timeout: float = 10.0
+
+
+@app.post("/exists")
+def selector_exists(body: SelectorBody):
+    """按 u2 选择器判断元素当前是否存在（不等待）。"""
+    d = get_device(body.serial)
+    try:
+        ok = bool(d(**body.selector).exists)
+    except Exception as e:
+        raise HTTPException(400, detail=f"bad selector: {e}") from e
+    return {"ok": True, "exists": ok}
+
+
+@app.post("/wait")
+def selector_wait(body: SelectorBody):
+    """按 u2 选择器等待元素出现，返回 found=true/false。"""
+    d = get_device(body.serial)
+    try:
+        found = bool(d(**body.selector).wait(timeout=body.timeout))
+    except Exception as e:
+        raise HTTPException(400, detail=f"bad selector: {e}") from e
+    return {"ok": True, "found": found}
+
+
+class TextBody(BaseModel):
+    serial: str
+    text: str
+    timeout: float = 10.0
+
+
+@app.post("/has_text")
+def has_text(body: TextBody):
+    """当前界面是否包含给定文本（不等待）。"""
+    d = get_device(body.serial)
+    return {"ok": True, "exists": bool(d(text=body.text).exists)}
+
+
+@app.post("/wait_text")
+def wait_text(body: TextBody):
+    """等待给定文本出现，返回 found=true/false。"""
+    d = get_device(body.serial)
+    found = bool(d(text=body.text).wait(timeout=body.timeout))
+    return {"ok": True, "found": found}
+
+
+class XPathBody(BaseModel):
+    serial: str
+    xpath: str
+    action: str = Field(
+        "exists",
+        description="exists | wait | click | get_text | info | all",
+    )
+    timeout: float = 10.0
+
+
+@app.post("/xpath")
+def xpath_action(body: XPathBody):
+    """对 XPath 表达式执行常用动作。
+
+    action：
+      - exists   立即返回 {exists: bool}
+      - wait     在 timeout 内等待，返回 {found: bool}
+      - click    在 timeout 内等待并点击；找不到 → 404
+      - get_text 在 timeout 内等待并取文本；找不到 → 404
+      - info     在 timeout 内等待并返回节点 info；找不到 → 404
+      - all      返回所有匹配节点 info 列表
+    """
+    d = get_device(body.serial)
+    try:
+        x = d.xpath(body.xpath)
+    except Exception as e:
+        raise HTTPException(400, detail=f"bad xpath: {e}") from e
+
+    act = (body.action or "exists").strip().lower()
+    if act == "exists":
+        return {"ok": True, "exists": bool(x.exists)}
+    if act == "wait":
+        return {"ok": True, "found": bool(x.wait(timeout=body.timeout))}
+    if act == "click":
+        if not x.wait(timeout=body.timeout):
+            raise HTTPException(404, detail=f"no node matched xpath: {body.xpath}")
+        x.click()
+        return {"ok": True}
+    if act == "get_text":
+        if not x.wait(timeout=body.timeout):
+            raise HTTPException(404, detail=f"no node matched xpath: {body.xpath}")
+        return {"ok": True, "text": x.get_text()}
+    if act == "info":
+        el = x.wait(timeout=body.timeout)
+        if not el:
+            raise HTTPException(404, detail=f"no node matched xpath: {body.xpath}")
+        info = getattr(el, "info", None)
+        if info is None:
+            info = dict(getattr(el, "attrib", {}) or {})
+        return {"ok": True, "info": info}
+    if act == "all":
+        nodes = x.all() or []
+        items = []
+        for n in nodes:
+            info = getattr(n, "info", None)
+            if info is None:
+                info = dict(getattr(n, "attrib", {}) or {})
+            items.append(info)
+        return {"ok": True, "count": len(items), "items": items}
+    raise HTTPException(400, detail=f"unknown action: {body.action}")
+
+
+def _parse_mode(mode: str) -> int:
+    """允许八进制 0o644 / 十六进制 0x1A4 / 纯数字字符串 644 (按八进制) / 0 前缀八进制。"""
+    m = (mode or "").strip()
+    if not m:
+        return 0o644
+    try:
+        if m.startswith(("0o", "0O")):
+            return int(m, 8)
+        if m.startswith(("0x", "0X")):
+            return int(m, 16)
+        if m.isdigit():
+            return int(m, 8)
+        return int(m, 0)
+    except ValueError:
+        return 0o644
+
+
+@app.post("/push")
+async def push_file(
+    serial: str = Form(..., description="adb serial"),
+    dst: str = Form(..., description="设备端目标绝对路径"),
+    mode: str = Form("0o644", description="权限：0o644 / 0x1A4 / 644 等"),
+    file: UploadFile = File(..., description="要上传的文件"),
+):
+    """将上传文件 PUSH 到设备端 dst 路径。"""
+    d = get_device(serial)
+    data = await file.read()
+    perm = _parse_mode(mode)
+    try:
+        d.push(io.BytesIO(data), dst, mode=perm)
+    except Exception as e:
+        raise HTTPException(502, detail=f"push failed: {e}") from e
+    return {
+        "ok": True,
+        "dst": dst,
+        "size": len(data),
+        "mode": oct(perm),
+        "filename": file.filename,
+    }
 
 
 @app.get("/health")

@@ -93,4 +93,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    """
+    export U2_BASE='https://caiji-adb-console-itoamms.smzdm.com/u2'
+    export ADEVICE_SERIAL=10.131.14.15
+    python3 u2_remote_tap.py -k 540 1200
+    """
     raise SystemExit(main())
