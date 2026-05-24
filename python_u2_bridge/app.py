@@ -266,16 +266,106 @@ def adb_shell(body: ShellBody):
     return {"ok": True, "output": out}
 
 
-@app.get("/screenshot")
-def screenshot(serial: str = Query(...), png: bool = True):
-    with use_device(serial) as d:
-        im = _call(d, lambda: d.screenshot())
+_SCREENSHOT_TIMEOUT = max(CALL_TIMEOUT, 60.0)
+
+
+def _screenshot_raw_png(d: Any) -> bytes:
+    """直接从 atx-agent 拿原始 PNG 字节，绕过 PIL 的 decode/encode。
+
+    优先用 uiautomator2 的 ``format="raw"`` 接口；不同版本签名差异较大，
+    都拿不到时回退到 PIL 路径，至少能保证可用。
+    """
+    try:
+        raw = d.screenshot(format="raw")
+        if isinstance(raw, (bytes, bytearray)):
+            return bytes(raw)
+    except TypeError:
+        # 老版本不支持 format 参数
+        pass
+    except Exception as e:
+        logger.debug("screenshot(format=raw) failed, fallback to PIL: %s", e)
+
+    im = d.screenshot()
     buf = io.BytesIO()
-    im.save(buf, format="PNG")
-    data = buf.getvalue()
+    try:
+        im.save(buf, format="PNG")
+        return buf.getvalue()
+    finally:
+        buf.close()
+        if hasattr(im, "close"):
+            try:
+                im.close()
+            except Exception:
+                pass
+
+
+def _screenshot_jpeg(d: Any, quality: int) -> bytes:
+    """需要 JPEG 时才走一次 PIL，体积/速度都比 PNG 强一截。"""
+    from PIL import Image  # noqa: PLC0415
+
+    im = d.screenshot()
+    try:
+        rgb = im.convert("RGB") if im.mode != "RGB" else im
+        buf = io.BytesIO()
+        try:
+            rgb.save(buf, format="JPEG", quality=quality, optimize=False)
+            return buf.getvalue()
+        finally:
+            buf.close()
+            if rgb is not im and hasattr(rgb, "close"):
+                try:
+                    rgb.close()
+                except Exception:
+                    pass
+    finally:
+        if hasattr(im, "close"):
+            try:
+                im.close()
+            except Exception:
+                pass
+
+
+@app.get("/screenshot")
+def screenshot(
+    serial: str = Query(...),
+    png: bool = Query(
+        True,
+        description="True=直接二进制；False=JSON+base64。fmt=jpeg 时输出会是 image/jpeg",
+    ),
+    fmt: str = Query("png", description="png 或 jpeg；jpeg 体积/CPU 都明显更省"),
+    quality: int = Query(
+        80, ge=10, le=100, description="JPEG 质量，仅 fmt=jpeg 时生效"
+    ),
+):
+    """优化版截图：
+
+    - ``fmt=png``：跳过 PIL，直接吐 atx-agent 原始 PNG 字节，省去无意义的解-编。
+    - ``fmt=jpeg``：体积小约 8x、CPU 降一个量级，自动化识别一般 quality=70~85 够用。
+    - ``png=false``：维持旧契约，返回 ``{ok, image_base64}``。
+    """
+    fmt = (fmt or "png").strip().lower()
+    if fmt == "jpg":
+        fmt = "jpeg"
+    if fmt not in ("png", "jpeg"):
+        raise HTTPException(400, detail="fmt must be png or jpeg")
+
+    with use_device(serial) as d:
+        if fmt == "png":
+            data = _call(d, lambda: _screenshot_raw_png(d), timeout=_SCREENSHOT_TIMEOUT)
+        else:
+            data = _call(
+                d, lambda: _screenshot_jpeg(d, quality), timeout=_SCREENSHOT_TIMEOUT
+            )
+
+    media_type = "image/png" if fmt == "png" else "image/jpeg"
     if png:
-        return Response(content=data, media_type="image/png")
-    return {"ok": True, "image_base64": base64.b64encode(data).decode("ascii")}
+        return Response(content=data, media_type=media_type)
+    return {
+        "ok": True,
+        "format": fmt,
+        "size": len(data),
+        "image_base64": base64.b64encode(data).decode("ascii"),
+    }
 
 
 @app.get("/dump")

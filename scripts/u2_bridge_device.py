@@ -264,22 +264,50 @@ class BridgeDevice:
         except urllib.error.HTTPError as e:
             raise RuntimeError(e.read().decode(errors="replace")) from e
 
-    def screenshot_png_bytes(self) -> bytes:
-        q = {"serial": self._serial, "png": "1"}
+    def screenshot_bytes(
+        self,
+        fmt: str = "png",
+        quality: int = 80,
+    ) -> bytes:
+        """通用截图字节接口。
+
+        - ``fmt="png"``：服务端直接吐 atx-agent 原始 PNG，跳过 PIL 解-编。
+        - ``fmt="jpeg"``：体积约小 8x、CPU 降一个量级，自动化识别一般够用。
+          ``quality`` 取 10~100，默认 80。
+        """
+        f = (fmt or "png").strip().lower()
+        if f == "jpg":
+            f = "jpeg"
+        if f not in ("png", "jpeg"):
+            raise ValueError("fmt 仅支持 png / jpeg")
+        q = {"serial": self._serial, "png": "1", "fmt": f}
+        if f == "jpeg":
+            q["quality"] = str(int(quality))
         try:
             return self._get_bytes("/screenshot", q)
         except urllib.error.HTTPError as e:
             raise RuntimeError(e.read().decode(errors="replace")) from e
 
-    def screenshot(self) -> Any:
-        """与 u2 类似返回 PIL.Image；未安装 pillow 时抛出明确错误。"""
+    def screenshot_png_bytes(self) -> bytes:
+        """兼容旧接口：固定 PNG 字节流。等价于 ``screenshot_bytes("png")``。"""
+        return self.screenshot_bytes("png")
+
+    def screenshot(
+        self,
+        fmt: str = "png",
+        quality: int = 80,
+    ) -> Any:
+        """与 u2 类似返回 PIL.Image；未安装 pillow 时抛出明确错误。
+
+        ``fmt="jpeg"`` 时走 JPEG 通道，远端编码更省 CPU，本地再让 PIL 解码即可。
+        """
         try:
             from PIL import Image  # noqa: PLC0415
         except ImportError as e:
             raise RuntimeError(
-                "screenshot() 需要 pillow：pip install pillow；或改用 screenshot_png_bytes()"
+                "screenshot() 需要 pillow：pip install pillow；或改用 screenshot_bytes()"
             ) from e
-        data = self.screenshot_png_bytes()
+        data = self.screenshot_bytes(fmt=fmt, quality=quality)
         return Image.open(BytesIO(data)).convert("RGB")
 
     def dump_hierarchy(self) -> str:
@@ -554,7 +582,7 @@ if __name__ == "__main__":
         # d.click_text(text='首页', timeout=3)
 
         # 2) 想要丰富排错信息时再开 debug（已绕过 nginx 直连时再用）
-        d.click_text(text='首1页', timeout=3, debug=True)
+        d.click_text(text='首页', timeout=3, debug=True)
 
 
         # 3) 严格只精确匹配（关掉 contains 兜底）
