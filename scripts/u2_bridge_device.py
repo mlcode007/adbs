@@ -610,7 +610,8 @@ if __name__ == "__main__":
     try:
         base_url = 'https://caiji-adb-console-itoamms.smzdm.com/u2'
         serial = '10.131.14.15'
-        d = connect(serial=serial, base=base_url, insecure=True)
+        d = connect(serial=serial, base=base_url, insecure=True, timeout=20)
+        print(d)
 
         # 1) 推荐：缩短服务端等待，立刻拿到 404，远低于任何 nginx 超时
         # d.click_text(text='首页', timeout=3)
@@ -622,7 +623,7 @@ if __name__ == "__main__":
         # 确定安装包: ls -al /data/data
         # 确认包路经: pm path xxxx
         # 拉去安装包: pull package.apk /data/local/tmp/_install.apk
-        d.pull("/data/app/~~V9D-onDkpw3jIPJLS2ArpA==/com.wuying.devinfo.dump-OCjmn7FYier3esnRH7NThw==/base.apk", "./_install.apk")
+        d.pull("/data/app/~~uIgd05PwJRRXfuP5TPZ-6w==/com.example.keyboxtest-tTCCKo1J9FEm53J34DzI0g==/base.apk", "./com.example.keyboxtest.apk")
 
 
         # 3) 严格只精确匹配（关掉 contains 兜底）
