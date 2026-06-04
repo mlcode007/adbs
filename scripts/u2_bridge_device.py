@@ -35,6 +35,10 @@
     # 推送文件
     d.push("./a.apk", "/sdcard/Download/a.apk", mode=0o644)
 
+    # 拉取文件（设备 -> 本地）
+    d.pull("/data/local/tmp/_install.apk", "./_install.apk")
+    data = d.pull("/sdcard/log.txt")  # 不传 dst 时直接返回 bytes
+
     d.disconnect()
 """
 
@@ -445,6 +449,36 @@ class BridgeDevice:
         except urllib.error.HTTPError as e:
             raise RuntimeError(e.read().decode(errors="replace")) from e
 
+    def pull(
+        self,
+        src: str,
+        dst: str | os.PathLike[str] | None = None,
+    ) -> bytes | Path:
+        """把设备端 ``src`` 文件拉取到本地（与 ``push`` 相反方向）。
+
+        - ``dst=None``：直接返回文件 ``bytes``，适合拉到内存里处理。
+        - ``dst`` 为目录：保存为 ``目录/<src 文件名>``，返回最终 ``Path``。
+        - ``dst`` 为文件路径：保存到该路径，返回 ``Path``。
+
+        例：
+            d.pull("/data/local/tmp/_install.apk", "./_install.apk")
+            data = d.pull("/sdcard/log.txt")  # 仅取字节
+        """
+        try:
+            data = self._get_bytes("/pull", {"serial": self._serial, "src": src})
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(e.read().decode(errors="replace")) from e
+
+        if dst is None:
+            return data
+
+        p = Path(os.fspath(dst))
+        if p.is_dir():
+            p = p / (os.path.basename(src) or "pulled.bin")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+        return p
+
     def __call__(self, **selector: Any) -> "_Selector":
         """模拟 u2 的 ``d(text="x")``，返回带 ``.exists`` / ``.wait()`` / ``.click()`` 的代理。"""
         return _Selector(self, selector)
@@ -582,7 +616,13 @@ if __name__ == "__main__":
         # d.click_text(text='首页', timeout=3)
 
         # 2) 想要丰富排错信息时再开 debug（已绕过 nginx 直连时再用）
-        d.click_text(text='首页', timeout=3, debug=True)
+        # d.click_text(text='首页', timeout=3, debug=True)
+
+        # 获取远程设备apk信息 dumpsys window displays | grep -E "mCurrentFocus|mFocusedApp"
+        # 确定安装包: ls -al /data/data
+        # 确认包路经: pm path xxxx
+        # 拉去安装包: pull package.apk /data/local/tmp/_install.apk
+        d.pull("/data/app/~~V9D-onDkpw3jIPJLS2ArpA==/com.wuying.devinfo.dump-OCjmn7FYier3esnRH7NThw==/base.apk", "./_install.apk")
 
 
         # 3) 严格只精确匹配（关掉 contains 兜底）

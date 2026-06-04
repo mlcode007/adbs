@@ -626,6 +626,52 @@ def push_file(
     }
 
 
+@app.get("/pull")
+def pull_file(
+    serial: str = Query(..., description="adb serial"),
+    src: str = Query(..., description="设备端要拉取的文件绝对路径"),
+):
+    """从设备端把 src 文件拉到调用方（与 /push 相反方向）。
+
+    底层用 ``uiautomator2.Device.pull`` 走 atx-agent 的下载通道；先落到本机临时文件，
+    读出字节后立即删除临时文件，再以二进制流返回。大文件拉取较慢，超时放宽到 5 分钟。
+    """
+    import tempfile
+
+    pull_timeout = max(CALL_TIMEOUT, 300.0)
+
+    with use_device(serial) as d:
+        def _do() -> bytes:
+            fd, tmp = tempfile.mkstemp(prefix="u2pull_")
+            os.close(fd)
+            try:
+                d.pull(src, tmp)
+                with open(tmp, "rb") as f:
+                    return f.read()
+            finally:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+
+        try:
+            data = _call(d, _do, timeout=pull_timeout)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(502, detail=f"pull failed: {e}") from e
+
+    filename = os.path.basename(src) or "pulled.bin"
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Pulled-Size": str(len(data)),
+        },
+    )
+
+
 @app.get("/health")
 def health():
     """无状态版本：只表明服务自身存活，不再列出会话列表。"""
